@@ -1,13 +1,8 @@
 import streamlit as st
-from streamlit_chat import message
-from langchain.chains import ConversationChain
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts.chat import (
-            ChatPromptTemplate,
-            SystemMessagePromptTemplate,
-            AIMessagePromptTemplate,
-            HumanMessagePromptTemplate,
-        )
+# from streamlit_chat import message
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -15,74 +10,84 @@ st.cache_resource.clear()
 st.cache_data.clear()
 
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-from langchain_openai import ChatOpenAI
-
-template = """
-
-        The following is a friendly conversation between a human and an AI. 
-        The AI is talkative and provides lots of specific details from its context. 
-        If the AI does not know the answer to a question, it truthfully says it does
-        not know.
-
-        Current conversation:
-        Human: {input}
-        AI Assistant:"""
-
-system_message_prompt = SystemMessagePromptTemplate.from_template(template)
-
-example_human_history = HumanMessagePromptTemplate.from_template("Hi")
-example_ai_history = AIMessagePromptTemplate.from_template("hello, how are you today?")
-
-human_template="{input}"
-human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
-
-chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt, example_human_history, example_ai_history, human_message_prompt])
-
-chat = ChatOpenAI(api_key=OPENAI_API_KEY, model_name='gpt-3.5-turbo', temperature=0.2)
-
 
 # From here down is all the StreamLit UI.
-st.set_page_config(page_title="Cicular Economy Business Ideas: How good are they? Are they moonshots? Let's find out!", page_icon=":robot:")
+st.set_page_config(page_title="Cicular Economy Business Ideas: How good are they? Are they any good? Let's find out!", page_icon=":robot:")
 st.header("Cicular Economy Business Ideas")
 st.subheader("How good are they? Are they moonshots? Let's find out!")
 
-def load_chain():
-    """Logic for loading the chain you want to use should go here."""
-    chain = ConversationChain(
-        chat=chat
-    )
-    return chain
+
+model = ChatOpenAI(api_key=OPENAI_API_KEY, model_name='gpt-4', temperature=0.2)
+problem_validation = ChatPromptTemplate.from_template("I am trying to solve this problem: {problem}. Evaluate whether this problem is important for sustainability, whether it already has a solution, and whether it is a problem that is likely to be solved in the future. Respond in under 100 words.")
+problem_validation_chain = problem_validation | model
+
+solution_validation = ChatPromptTemplate.from_template("I am trying to solve this problem: {problem}. This is my proposed solution: {solution}. Evaluate if my solution addresses the problem, how sustainable it is, if it is a good solution, and if it is a solution that is possible to implement.")
+solution_validation_chain = solution_validation | model
+
+qa = ChatPromptTemplate.from_template("I am trying to solve this problem: {problem}. This is my proposed solution: {solution}. I have the following question: {question}")
+qa_chain = qa | model
+
+chains = [problem_validation_chain, solution_validation_chain, qa_chain]
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "input_state" not in st.session_state:
+    st.session_state.input_state = 0
+
+if "problem" not in st.session_state:
+    st.session_state.problem = "no problem specified"
+if "solution" not in st.session_state:
+    st.session_state.solution = "no solution specified"
+if "question" not in st.session_state:
+    st.session_state.question = "no question specified"
+
+if st.button("New session"):
+    st.session_state.messages = []
+    st.session_state.input_state = 0
+    st.session_state.problem = "no problem specified"
+    st.session_state.solution = "no solution specified"
+    st.session_state.question = "no question specified"
 
 
-if "chain" not in st.session_state:
-    st.session_state["chain"] = load_chain()
-
-chain = st.session_state["chain"]
-
-if "generated" not in st.session_state:
-    st.session_state["generated"] = []
-
-if "past" not in st.session_state:
-    st.session_state["past"] = []
+if st.session_state.messages == []:
+    st.session_state.messages.append({"role": "assistant", "content": "Enter a real world problem you could solve with the help of your idea and let's get started!"})
 
 
-def get_text():
-    input_text = st.text_input("You: ", "", key="input")
-    return input_text
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if user_input := st.chat_input("Message the assistant..."):
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+    if st.session_state.input_state == 0:
+        st.session_state.problem = user_input
+    elif st.session_state.input_state == 1:
+        st.session_state.solution = user_input
+    else:
+        st.session_state.question = user_input
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        full_response = ""
+        # print(st.session_state.input_state, st.session_state.problem, st.session_state.solution, st.session_state.question)
+        for response in chains[st.session_state.input_state].stream({"problem": st.session_state.problem, "solution": st.session_state.solution, "question": st.session_state.question}):
+            full_response += (response.content or "")
+            message_placeholder.markdown(full_response + "▌")
+        message_placeholder.markdown(full_response)
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+    if st.session_state.input_state == 0:
+        with st.chat_message("assistant"):
+            full_response = "Now enter your idea"
+            st.markdown("Now enter your idea")
+            st.session_state.input_state = 1
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+    elif st.session_state.input_state == 1:
+        with st.chat_message("assistant"):
+            full_response = "Enter any questions you have about this solution"
+            st.markdown("Enter any questions you have about this solution")
+            st.session_state.input_state = 2
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 
-user_input = get_text()
-
-if user_input:
-    print(user_input)
-    output = chat.generate() #????
-    print(output)
-
-    st.session_state.past.append(user_input)
-    st.session_state.generated.append(output)
-
-if st.session_state["generated"]:
-
-    for i in range(len(st.session_state["past"]) - 1, -1, -1):
-        message(st.session_state["generated"][i], key=str(i))
-        message(st.session_state["past"][i], is_user=True, key=str(i) + "_user")
