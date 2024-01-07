@@ -12,9 +12,9 @@ st.cache_data.clear()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # From here down is all the StreamLit UI.
-st.set_page_config(page_title="Cicular Economy Business Ideas: How good are they? Are they any good? Let's find out!", page_icon=":robot:")
-st.header("Cicular Economy Business Ideas")
-st.subheader("How good are they? Are they moonshots? Let's find out!")
+st.set_page_config(page_title="Circular Economy Business Ideas: How good are they? Are they any good? Let's find out!", page_icon=":robot:")
+st.header("Circular Economy Business Ideas")
+st.subheader("How good are they? Are they any good? Let's find out!")
 
 
 model = ChatOpenAI(api_key=OPENAI_API_KEY, model_name='gpt-4', temperature=0.2)
